@@ -1,0 +1,21 @@
+{
+  "private": true,
+  "name": "auto-silent-timer",
+  "version": "1.0.0",
+  "description": "Convenience npm wrappers over Gradle/adb for the Auto Silent Timer Android app.",
+  "scripts": {
+    "build-local-apk": "node scripts/run-gradle.js assembleDebug",
+    "build-release-apk": "node scripts/run-gradle.js assembleRelease",
+    "install-apk": "node scripts/run-gradle.js installDebug",
+    "clean": "node scripts/run-gradle.js clean",
+    "lint": "node scripts/run-gradle.js lint",
+    "devices": "node scripts/run-adb.js devices",
+    "logcat": "node scripts/run-adb.js logcat",
+    "uninstall-apk": "node scripts/run-adb.js uninstall com.vibes.autosilenttimer",
+    "encrypt-keystore": "node scripts/crypto-keystore.js encrypt",
+    "decrypt-keystore": "node scripts/crypto-keystore.js decrypt"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
