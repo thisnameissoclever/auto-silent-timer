@@ -1,5 +1,6 @@
 package com.vibes.autosilenttimer
 
+import android.app.NotificationManager
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -8,7 +9,9 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 
@@ -31,6 +34,10 @@ class MonitorService : Service() {
 
     private var overlay: OverlayController? = null
     private var ringerReceiver: BroadcastReceiver? = null
+    private var dndReceiver: BroadcastReceiver? = null
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var pendingPrompt: Runnable? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -56,6 +63,24 @@ class MonitorService : Service() {
             this,
             receiver,
             IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        // Track DND/Bedtime transitions so a ringer change they cause can be told
+        // apart from the user flipping the ringer switch. System broadcast: still
+        // delivered to a NOT_EXPORTED runtime receiver.
+        val dnd = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent?) {
+                if (intent?.action == NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED) {
+                    RingerController.noteDndFilterChanged()
+                }
+            }
+        }
+        dndReceiver = dnd
+        ContextCompat.registerReceiver(
+            this,
+            dnd,
+            IntentFilter(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
     }
@@ -99,19 +124,48 @@ class MonitorService : Service() {
         if (RingerController.shouldIgnore()) return
         when (RingerController.currentMode(this)) {
             AudioManager.RINGER_MODE_VIBRATE,
-            AudioManager.RINGER_MODE_SILENT -> {
-                // User silenced the phone: prompt (replacing-the-timer happens on OK).
-                overlay?.let { if (!it.isShowing) it.show() }
-            }
+            AudioManager.RINGER_MODE_SILENT -> scheduleSilencePrompt()
 
             AudioManager.RINGER_MODE_NORMAL -> {
                 // User manually returned to normal: drop any pending timer/overlay.
+                cancelPendingPrompt()
                 AlarmScheduler.cancel(this)
                 Prefs(this).clearTimer()
                 NotificationHelper.updateMonitorNotification(this)
                 overlay?.let { if (it.isShowing) it.dismiss() }
             }
         }
+    }
+
+    /**
+     * Shows the silent-mode prompt unless the silence was caused by Do Not Disturb
+     * or Bedtime mode.
+     *
+     * `RINGER_MODE_CHANGED` and `ACTION_INTERRUPTION_FILTER_CHANGED` are delivered
+     * from independent paths with no guaranteed ordering, so the decision cannot
+     * be made synchronously here. The prompt is deferred briefly to give the DND
+     * broadcast time to land; if a DND transition occurred around this ringer
+     * change *and* DND is still in effect, the silence was DND-driven and no
+     * prompt is shown. Requiring a recent transition (not merely "DND is on")
+     * means a manual silence still prompts under an always-on DND schedule.
+     */
+    private fun scheduleSilencePrompt() {
+        cancelPendingPrompt()
+        val runnable = Runnable {
+            pendingPrompt = null
+            if (RingerController.dndChangedRecently() && RingerController.isDndActive(this)) return@Runnable
+            // The user may have flipped back to normal during the delay.
+            if (RingerController.currentMode(this) == AudioManager.RINGER_MODE_NORMAL) return@Runnable
+            // User silenced the phone: prompt (replacing-the-timer happens on OK).
+            overlay?.let { if (!it.isShowing) it.show() }
+        }
+        pendingPrompt = runnable
+        handler.postDelayed(runnable, PROMPT_DELAY_MS)
+    }
+
+    private fun cancelPendingPrompt() {
+        pendingPrompt?.let { handler.removeCallbacks(it) }
+        pendingPrompt = null
     }
 
     private fun onOverlayOk(durationMillis: Long) {
@@ -128,7 +182,8 @@ class MonitorService : Service() {
     }
 
     override fun onDestroy() {
-        ringerReceiver?.let {
+        cancelPendingPrompt()
+        listOfNotNull(ringerReceiver, dndReceiver).forEach {
             try {
                 unregisterReceiver(it)
             } catch (e: IllegalArgumentException) {
@@ -136,12 +191,25 @@ class MonitorService : Service() {
             }
         }
         ringerReceiver = null
+        dndReceiver = null
         overlay?.dismiss()
         overlay = null
         super.onDestroy()
     }
 
     companion object {
+        /**
+         * How long the silent-mode prompt is deferred so a DND/Bedtime-driven
+         * silence (whose `ACTION_INTERRUPTION_FILTER_CHANGED` broadcast may arrive
+         * after this ringer change) can be recognised before the prompt appears.
+         *
+         * Kept comfortably under [RingerController.DND_CORRELATION_WINDOW_MS] and
+         * well below the threshold of a perceptible UI lag: it widens the margin
+         * for the two unordered broadcasts to be correlated at the cost of the
+         * prompt appearing a fraction of a second later after a genuine silence.
+         */
+        private const val PROMPT_DELAY_MS = 500L
+
         /** Starts the monitoring service in the foreground. */
         fun start(context: Context) {
             ContextCompat.startForegroundService(
