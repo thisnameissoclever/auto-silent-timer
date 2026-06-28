@@ -208,7 +208,7 @@ class MonitorService : Service() {
          * for the two unordered broadcasts to be correlated at the cost of the
          * prompt appearing a fraction of a second later after a genuine silence.
          */
-        private const val PROMPT_DELAY_MS = 600L
+        private const val PROMPT_DELAY_MS = 500L
 
         /** Starts the monitoring service in the foreground. */
         fun start(context: Context) {
