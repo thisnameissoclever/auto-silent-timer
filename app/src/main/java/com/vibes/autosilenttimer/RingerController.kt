@@ -1,5 +1,6 @@
 package com.vibes.autosilenttimer
 
+import android.app.NotificationManager
 import android.content.Context
 import android.media.AudioManager
 import android.os.SystemClock
@@ -48,6 +49,26 @@ object RingerController {
 
     /** Current ringer mode, one of `AudioManager.RINGER_MODE_*`. */
     fun currentMode(context: Context): Int = audioManager(context).ringerMode
+
+    /**
+     * True when Do Not Disturb is currently filtering interruptions, which also
+     * covers Bedtime mode (Digital Wellbeing's Bedtime turns DND on).
+     *
+     * Used to tell a DND/Bedtime-driven silence apart from the user manually
+     * flipping the ringer switch: enabling DND moves the interruption filter off
+     * `INTERRUPTION_FILTER_ALL`, whereas a plain silent/vibrate toggle leaves it
+     * at `ALL`. Reading the filter needs no special permission.
+     */
+    fun isDndActive(context: Context): Boolean {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        return when (nm.currentInterruptionFilter) {
+            NotificationManager.INTERRUPTION_FILTER_PRIORITY,
+            NotificationManager.INTERRUPTION_FILTER_ALARMS,
+            NotificationManager.INTERRUPTION_FILTER_NONE -> true
+            // ALL (no DND) or UNKNOWN: treat as a user-driven ringer change.
+            else -> false
+        }
+    }
 
     private fun audioManager(context: Context): AudioManager =
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager

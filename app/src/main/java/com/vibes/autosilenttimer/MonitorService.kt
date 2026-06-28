@@ -100,6 +100,10 @@ class MonitorService : Service() {
         when (RingerController.currentMode(this)) {
             AudioManager.RINGER_MODE_VIBRATE,
             AudioManager.RINGER_MODE_SILENT -> {
+                // Don't prompt when the silence came from Do Not Disturb / Bedtime
+                // mode (those move the interruption filter off ALL). Only a
+                // user-initiated flip of the ringer switch should show the prompt.
+                if (RingerController.isDndActive(this)) return
                 // User silenced the phone: prompt (replacing-the-timer happens on OK).
                 overlay?.let { if (!it.isShowing) it.show() }
             }
