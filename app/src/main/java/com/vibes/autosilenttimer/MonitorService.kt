@@ -202,8 +202,13 @@ class MonitorService : Service() {
          * How long the silent-mode prompt is deferred so a DND/Bedtime-driven
          * silence (whose `ACTION_INTERRUPTION_FILTER_CHANGED` broadcast may arrive
          * after this ringer change) can be recognised before the prompt appears.
+         *
+         * Kept comfortably under [RingerController.DND_CORRELATION_WINDOW_MS] and
+         * well below the threshold of a perceptible UI lag: it widens the margin
+         * for the two unordered broadcasts to be correlated at the cost of the
+         * prompt appearing a fraction of a second later after a genuine silence.
          */
-        private const val PROMPT_DELAY_MS = 400L
+        private const val PROMPT_DELAY_MS = 600L
 
         /** Starts the monitoring service in the foreground. */
         fun start(context: Context) {
