@@ -36,8 +36,11 @@ object RingerController {
      * `RINGER_MODE_CHANGED` and `ACTION_INTERRUPTION_FILTER_CHANGED` are delivered
      * on independent paths with no guaranteed ordering, so the monitor correlates
      * them within this window rather than reading the filter synchronously.
+     *
+     * `internal` (not `private`) so [MonitorService] can reference it to keep its
+     * own prompt delay safely under this window.
      */
-    private const val DND_CORRELATION_WINDOW_MS = 1500L
+    internal const val DND_CORRELATION_WINDOW_MS = 1500L
 
     /**
      * [SystemClock.elapsedRealtime] of the last interruption-filter change, or 0

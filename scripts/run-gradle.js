@@ -5,8 +5,17 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { resolveSigning, missingKeystoreMessage } = require('./keystore-config');
 
 const repoRoot = path.resolve(__dirname, '..');
+
+// Tasks that produce/install a *release* artifact and therefore need the signing
+// keystore. Debug builds, clean and lint do not, so they are never blocked.
+const RELEASE_SIGNING_TASK = /(assemble|bundle|install|package|publish).*release/i;
+
+function requiresReleaseSigning(tasks) {
+  return tasks.some((t) => RELEASE_SIGNING_TASK.test(t));
+}
 
 function javaBinExists(javaHome) {
   if (!javaHome) return false;
@@ -55,6 +64,17 @@ function javaOnPath() {
 }
 
 const tasks = process.argv.slice(2);
+
+// Fail fast (before spinning up Gradle) when a release/signing build is requested
+// but no usable keystore can be resolved, pointing the user at the decrypt step.
+if (requiresReleaseSigning(tasks)) {
+  const signing = resolveSigning(repoRoot);
+  if (!signing.ok) {
+    console.error(missingKeystoreMessage(signing));
+    process.exit(1);
+  }
+  console.log(`Release signing keystore found: ${signing.resolvedStoreFile}`);
+}
 
 const env = { ...process.env };
 const jh = resolveJavaHome();
