@@ -37,6 +37,10 @@ class MonitorService : Service() {
     private var dndReceiver: BroadcastReceiver? = null
 
     private val handler = Handler(Looper.getMainLooper())
+
+    // Touched only on the main thread: both broadcast receivers are dispatched
+    // there (registered without a handler) and [handler] targets the main looper,
+    // so the deferred-prompt state needs no synchronization.
     private var pendingPrompt: Runnable? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -73,6 +77,7 @@ class MonitorService : Service() {
             override fun onReceive(context: Context, intent: Intent?) {
                 if (intent?.action == NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED) {
                     RingerController.noteDndFilterChanged()
+                    onDndFilterChanged()
                 }
             }
         }
@@ -166,6 +171,23 @@ class MonitorService : Service() {
     private fun cancelPendingPrompt() {
         pendingPrompt?.let { handler.removeCallbacks(it) }
         pendingPrompt = null
+    }
+
+    /**
+     * Reacts to a DND/Bedtime interruption-filter change.
+     *
+     * [scheduleSilencePrompt] only waits [PROMPT_DELAY_MS] for this broadcast, but
+     * the two broadcasts have no guaranteed ordering and the filter change can land
+     * later than that — by which point the prompt may already be showing for what
+     * is really a DND-driven silence. So if DND is now active and the user has not
+     * yet committed a timer, retract the still-undecided prompt (and drop any prompt
+     * still pending). Runs on the main thread, so touching the overlay is safe.
+     */
+    private fun onDndFilterChanged() {
+        if (!RingerController.isDndActive(this)) return
+        if (Prefs(this).timerEndAtMillis > 0L) return
+        cancelPendingPrompt()
+        overlay?.let { if (it.isShowing) it.dismiss() }
     }
 
     private fun onOverlayOk(durationMillis: Long) {

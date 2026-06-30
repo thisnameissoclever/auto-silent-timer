@@ -57,7 +57,7 @@
     <!-- Notification content -->
     <string name="notif_monitor_title">Auto Silent Timer is on</string>
     <string name="notif_monitor_text">Watching for silent or vibrate mode.</string>
-    <string name="notif_monitor_text_timer">Sound resumes in %1$s</string>
+    <string name="notif_monitor_text_timer">Sound resumes at %1$s</string>
     <string name="notif_restore_title">Sound restored</string>
     <string name="notif_restore_text">Your phone\'s sound is back on.</string>
 

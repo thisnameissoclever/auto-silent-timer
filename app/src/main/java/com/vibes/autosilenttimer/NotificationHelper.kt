@@ -24,7 +24,12 @@ object NotificationHelper {
 
     private const val RESTORE_ID = 1002
 
-    private const val CHANNEL_MONITOR = "monitor"
+    // Bumped from the original "monitor" (IMPORTANCE_LOW) channel: a channel's
+    // importance is fixed once created, so a new id is required for the lower
+    // IMPORTANCE_MIN to take effect on existing installs. The legacy channel is
+    // deleted in [ensureChannels].
+    private const val CHANNEL_MONITOR = "monitor_status"
+    private const val CHANNEL_MONITOR_LEGACY = "monitor"
     private const val CHANNEL_RESTORE = "restore"
 
     /** Creates the notification channels. Idempotent; safe to call repeatedly. */
@@ -32,10 +37,15 @@ object NotificationHelper {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // Remove the old IMPORTANCE_LOW channel so it doesn't linger in Settings.
+        nm.deleteNotificationChannel(CHANNEL_MONITOR_LEGACY)
+
+        // IMPORTANCE_MIN keeps the ongoing FGS notification in the shade (required
+        // to keep the service alive) but hides its icon from the status bar.
         val monitor = NotificationChannel(
             CHANNEL_MONITOR,
             context.getString(R.string.channel_monitor_name),
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_MIN
         ).apply {
             description = context.getString(R.string.channel_monitor_desc)
             setShowBadge(false)
@@ -76,7 +86,7 @@ object NotificationHelper {
             .setContentIntent(mainActivityIntent(context))
             .setOngoing(true)
             .setShowWhen(false)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
 
         if (hasTimer) {

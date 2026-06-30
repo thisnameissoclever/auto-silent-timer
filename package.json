@@ -9,6 +9,7 @@
     "install-apk": "node scripts/run-gradle.js installDebug",
     "clean": "node scripts/run-gradle.js clean",
     "lint": "node scripts/run-gradle.js lint",
+    "test": "node scripts/run-gradle.js testDebugUnitTest",
     "devices": "node scripts/run-adb.js devices",
     "logcat": "node scripts/run-adb.js logcat",
     "uninstall-apk": "node scripts/run-adb.js uninstall com.vibes.autosilenttimer",
