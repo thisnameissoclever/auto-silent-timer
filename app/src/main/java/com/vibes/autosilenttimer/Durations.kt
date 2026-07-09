@@ -23,6 +23,13 @@ enum class TimeUnitOption(val label: String, val millisPerUnit: Long) {
 /** A one-tap preset duration. [millis] is the total length in milliseconds. */
 data class Preset(val label: String, val millis: Long)
 
+/** The previously accepted duration, mapped back to the overlay's input model. */
+sealed class LastDurationSelection {
+    data object None : LastDurationSelection()
+    data class Preset(val millis: Long) : LastDurationSelection()
+    data class Custom(val value: Long, val unit: TimeUnitOption) : LastDurationSelection()
+}
+
 /** Preset durations offered in the overlay prompt, in ascending order. */
 val PRESETS: List<Preset> = listOf(
     Preset("15 min", 15L * TimeUnitOption.MINUTES.millisPerUnit),
@@ -35,3 +42,34 @@ val PRESETS: List<Preset> = listOf(
 
 /** Converts a [value] expressed in [unit]s into milliseconds. */
 fun computeMillis(value: Long, unit: TimeUnitOption): Long = value * unit.millisPerUnit
+
+/**
+ * Converts a remembered duration into the visible selection to restore next
+ * time the overlay opens.
+ */
+fun selectionFromLastDuration(
+    millis: Long,
+    preferredUnitLabel: String
+): LastDurationSelection {
+    if (millis <= 0L) return LastDurationSelection.None
+
+    PRESETS.firstOrNull { it.millis == millis }?.let {
+        return LastDurationSelection.Preset(it.millis)
+    }
+
+    val preferredUnit = TimeUnitOption.fromLabel(preferredUnitLabel)
+    if (millis % preferredUnit.millisPerUnit == 0L) {
+        val value = millis / preferredUnit.millisPerUnit
+        if (value > 0L) return LastDurationSelection.Custom(value, preferredUnit)
+    }
+
+    val fallbackUnits = listOf(
+        TimeUnitOption.DAYS,
+        TimeUnitOption.HOURS,
+        TimeUnitOption.MINUTES
+    )
+    val fallbackUnit = fallbackUnits.firstOrNull { millis % it.millisPerUnit == 0L }
+        ?: return LastDurationSelection.None
+
+    return LastDurationSelection.Custom(millis / fallbackUnit.millisPerUnit, fallbackUnit)
+}

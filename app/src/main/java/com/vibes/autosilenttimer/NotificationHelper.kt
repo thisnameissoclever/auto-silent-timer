@@ -1,14 +1,17 @@
 package com.vibes.autosilenttimer
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import java.text.DateFormat
 import java.util.Date
 
@@ -124,10 +127,20 @@ object NotificationHelper {
     }
 
     private fun notifySafely(context: Context, id: Int, notification: Notification) {
-        // POST_NOTIFICATIONS is required to post on Android 13+; if it is missing
-        // the call would be silently dropped anyway, so skip it (keeps lint happy).
-        if (!Permissions.hasPostNotifications(context)) return
-        NotificationManagerCompat.from(context).notify(id, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (_: SecurityException) {
+            // Permission may have changed between the check and notify call.
+        }
     }
 
     private fun mainActivityIntent(context: Context): PendingIntent {

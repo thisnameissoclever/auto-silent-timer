@@ -60,20 +60,17 @@
                     android:textAppearance="?attr/textAppearanceTitleSmall"
                     android:textColor="?attr/colorOnSurface" />
 
-                <HorizontalScrollView
+                <!-- Chips wrap across rows so the preset list stays inside the card. -->
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/presets_group"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:scrollbars="none">
-
-                    <!-- Buttons are added programmatically, one per Durations.PRESETS. -->
-                    <com.google.android.material.button.MaterialButtonToggleGroup
-                        android:id="@+id/presets_group"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        app:selectionRequired="false"
-                        app:singleSelection="true" />
-                </HorizontalScrollView>
+                    app:chipSpacingHorizontal="8dp"
+                    app:chipSpacingVertical="4dp"
+                    app:selectionRequired="false"
+                    app:singleLine="false"
+                    app:singleSelection="true" />
 
                 <TextView
                     android:id="@+id/custom_label"

@@ -42,4 +42,29 @@ class DurationsTest {
         assertEquals("presets should be sorted ascending", millis.sorted(), millis)
         assertTrue("presets should all be positive", millis.all { it > 0L })
     }
+
+    @Test
+    fun selectionFromLastDuration_returnsNoneWhenNothingHasBeenRemembered() {
+        assertEquals(LastDurationSelection.None, selectionFromLastDuration(0L, Prefs.DEFAULT_UNIT))
+    }
+
+    @Test
+    fun selectionFromLastDuration_matchesRememberedPreset() {
+        val remembered = PRESETS.first { it.label == "2 hours" }
+
+        assertEquals(
+            LastDurationSelection.Preset(remembered.millis),
+            selectionFromLastDuration(remembered.millis, Prefs.DEFAULT_UNIT)
+        )
+    }
+
+    @Test
+    fun selectionFromLastDuration_prefillsCustomValueUsingLastUnit() {
+        val millis = computeMillis(48L, TimeUnitOption.HOURS)
+
+        assertEquals(
+            LastDurationSelection.Custom(48L, TimeUnitOption.HOURS),
+            selectionFromLastDuration(millis, TimeUnitOption.HOURS.label)
+        )
+    }
 }

@@ -27,6 +27,14 @@ class Prefs(context: Context) {
         set(value) = prefs.edit().putString(KEY_LAST_UNIT, value).apply()
 
     /**
+     * Last accepted silent-mode timer duration, in milliseconds. A value of 0L
+     * means the user has not accepted a duration yet.
+     */
+    var lastDurationMillis: Long
+        get() = prefs.getLong(KEY_LAST_DURATION_MILLIS, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_DURATION_MILLIS, value.coerceAtLeast(0L)).apply()
+
+    /**
      * Whether the user currently has monitoring enabled. Defaults to true: the
      * app represents the user's intent as "on", and auto-starts the engine once
      * the required permissions are present. An explicit Stop sets this to false.
@@ -53,6 +61,7 @@ class Prefs(context: Context) {
         const val DEFAULT_UNIT = "hours"
 
         private const val KEY_LAST_UNIT = "last_unit"
+        private const val KEY_LAST_DURATION_MILLIS = "last_duration_millis"
         private const val KEY_MONITORING_ENABLED = "monitoring_enabled"
         private const val KEY_TIMER_END_AT = "timer_end_at_millis"
     }

@@ -41,10 +41,11 @@ object Permissions {
     /** True if notifications may be posted. Always true below Android 13 (TIRAMISU). */
     fun hasPostNotifications(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
-        return ContextCompat.checkSelfPermission(
+        val permissionGranted = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED
+        return canPostNotificationsForSdk(Build.VERSION.SDK_INT, permissionGranted)
     }
 
     /** Opens the "display over other apps" settings for this app. */
@@ -76,3 +77,8 @@ object Permissions {
             )
         }
 }
+
+internal fun canPostNotificationsForSdk(
+    sdkInt: Int,
+    permissionGranted: Boolean
+): Boolean = sdkInt < Build.VERSION_CODES.TIRAMISU || permissionGranted

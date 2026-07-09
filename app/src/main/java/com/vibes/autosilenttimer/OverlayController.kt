@@ -12,7 +12,7 @@ import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.widget.addTextChangedListener
-import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
 import com.vibes.autosilenttimer.databinding.OverlaySilentPromptBinding
 
 /**
@@ -80,6 +80,7 @@ class OverlayController(
 
         setupPresets(binding)
         setupCustomRow(binding)
+        applyLastDurationSelection(binding)
         setupButtons(binding)
 
         // Tap on the transparent area outside the card cancels; the card itself is
@@ -111,20 +112,21 @@ class OverlayController(
     private fun setupPresets(binding: OverlaySilentPromptBinding) {
         val group = binding.presetsGroup
         for (preset in PRESETS) {
-            val button = MaterialButton(
+            val chip = Chip(
                 themedContext,
                 null,
-                com.google.android.material.R.attr.materialButtonOutlinedStyle
+                com.google.android.material.R.attr.chipStyle
             ).apply {
                 id = View.generateViewId()
                 text = preset.label
                 tag = preset.millis
                 isCheckable = true
+                isSingleLine = true
             }
-            group.addView(button)
+            group.addView(chip)
         }
-        group.addOnButtonCheckedListener { _, _, isChecked ->
-            if (isChecked && !suppressPresetClear) {
+        group.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (checkedIds.isNotEmpty() && !suppressPresetClear) {
                 // A preset became the active source: clear the custom amount.
                 suppressCustomClear = true
                 binding.customAmount.text?.clear()
@@ -160,6 +162,27 @@ class OverlayController(
         }
     }
 
+    private fun applyLastDurationSelection(binding: OverlaySilentPromptBinding) {
+        val prefs = Prefs(context)
+        when (
+            val selection = selectionFromLastDuration(
+                prefs.lastDurationMillis,
+                prefs.lastUnit
+            )
+        ) {
+            LastDurationSelection.None -> Unit
+            is LastDurationSelection.Preset -> {
+                val chip = findPresetChip(binding, selection.millis) ?: return
+                binding.presetsGroup.check(chip.id)
+            }
+            is LastDurationSelection.Custom -> {
+                setCustomUnitSelection(binding, selection.unit)
+                binding.customAmount.setText(selection.value.toString())
+                binding.customAmount.setSelection(binding.customAmount.text?.length ?: 0)
+            }
+        }
+    }
+
     private fun setupButtons(binding: OverlaySilentPromptBinding) {
         binding.buttonCancel.setOnClickListener { onCancel() }
         binding.buttonOk.setOnClickListener { handleOk(binding) }
@@ -167,7 +190,7 @@ class OverlayController(
 
     private fun clearPresetSelection(binding: OverlaySilentPromptBinding) {
         suppressPresetClear = true
-        binding.presetsGroup.clearChecked()
+        binding.presetsGroup.clearCheck()
         suppressPresetClear = false
     }
 
@@ -181,19 +204,41 @@ class OverlayController(
         binding.customUnit.selectedItem?.toString()?.let { label ->
             Prefs(context).lastUnit = TimeUnitOption.fromLabel(label).label
         }
+        Prefs(context).lastDurationMillis = millis
         onOk(millis)
     }
 
     private fun computeSelectedMillis(binding: OverlaySilentPromptBinding): Long {
-        val checkedId = binding.presetsGroup.checkedButtonId
+        val checkedId = binding.presetsGroup.checkedChipId
         if (checkedId != View.NO_ID) {
-            val button = binding.presetsGroup.findViewById<MaterialButton?>(checkedId)
-            return (button?.tag as? Long) ?: -1L
+            val chip = binding.presetsGroup.findViewById<Chip?>(checkedId)
+            return (chip?.tag as? Long) ?: -1L
         }
         val value = binding.customAmount.text?.toString()?.trim()?.toLongOrNull() ?: return -1L
         if (value <= 0L) return -1L
         val unitLabel = binding.customUnit.selectedItem?.toString() ?: Prefs.DEFAULT_UNIT
         return computeMillis(value, TimeUnitOption.fromLabel(unitLabel))
+    }
+
+    private fun setCustomUnitSelection(
+        binding: OverlaySilentPromptBinding,
+        unit: TimeUnitOption
+    ) {
+        val units = context.resources.getStringArray(R.array.time_units)
+        val selectedIndex = units.indexOfFirst { it.equals(unit.label, ignoreCase = true) }
+        binding.customUnit.setSelection(if (selectedIndex >= 0) selectedIndex else 0)
+    }
+
+    private fun findPresetChip(
+        binding: OverlaySilentPromptBinding,
+        millis: Long
+    ): Chip? {
+        val group = binding.presetsGroup
+        for (index in 0 until group.childCount) {
+            val chip = group.getChildAt(index) as? Chip
+            if (chip?.tag == millis) return chip
+        }
+        return null
     }
 
     private fun buildLayoutParams(): WindowManager.LayoutParams =
