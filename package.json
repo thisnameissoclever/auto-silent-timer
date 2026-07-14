@@ -4,6 +4,10 @@
   "version": "1.0.0",
   "description": "Convenience npm wrappers over Gradle/adb for the Auto Silent Timer Android app.",
   "scripts": {
+    "test:crypto-env": "node --test ./scripts/crypto-env.test.mjs",
+    "env:publish": "node ./scripts/crypto-env.mjs publish",
+    "env:decrypt": "node ./scripts/crypto-env.mjs decrypt",
+    "env:encrypt": "node ./scripts/crypto-env.mjs encrypt",
     "build-local-apk": "node scripts/run-gradle.js assembleDebug",
     "build-release-apk": "node scripts/run-gradle.js assembleRelease",
     "install-apk": "node scripts/run-gradle.js installDebug",

@@ -37,3 +37,9 @@ google-services.json
 # Node (npm convenience wrappers)
 node_modules/
 npm-debug.log*
+
+# Encrypted env onboarding bundle (plaintext .env stays ignored)
+/credentials/*
+!/credentials/env.enc
+.env
+.env*.local
