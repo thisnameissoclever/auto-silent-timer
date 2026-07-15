@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Rounded pill behind the granted/needed status label. The solid color is a
-     placeholder; MainActivity applies a backgroundTint per state. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <corners android:radius="999dp" />
-    <solid android:color="@android:color/white" />
-</shape>

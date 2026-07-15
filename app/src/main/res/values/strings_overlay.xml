@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Phase 2a (engine) overlay strings. Kept in a separate file so it does not
-         collide with the UI-owned strings.xml. -->
-    <string name="overlay_invalid_duration">Pick a preset or enter a duration</string>
-</resources>
