@@ -238,6 +238,7 @@ test('publishes only env.enc to origin/main while behind with dirty WIP', async 
   assert.equal(encryptResult.code, 0);
   assert.match(encryptResult.stdout, /Pushed credentials\/env\.enc to origin\/main/);
   assert.match(encryptResult.stdout, /Local branch tip and other WIP were not modified/);
+  assert.match(encryptResult.stdout, /Integrate onto local main when ready/);
 
   const headAfter = (await runGitOrThrow(['rev-parse', 'HEAD'], work)).stdout.trim();
   assert.equal(headAfter, headBefore);
@@ -314,4 +315,139 @@ test('fast-forwards local main and leaves a clean tree when in sync with origin'
   // WIP content is untouched.
   assert.equal(await readFile(join(work, 'README.md'), 'utf8'), 'local-wip-readme\n');
   assert.equal(await readFile(join(work, 'noise.txt'), 'utf8'), 'keep-me\n');
+});
+
+test('refuses to publish when local main has unpushed commits', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'crypto-env-ahead-'));
+  tempDirs.push(root);
+  const bare = join(root, 'bare.git');
+  const work = join(root, 'work');
+
+  await runGitOrThrow(['init', '--bare', '-b', 'main', bare], root);
+  await runGitOrThrow(['clone', bare, work], root);
+  await runGitOrThrow(['config', 'user.email', 'crypto-env-test@example.com'], work);
+  await runGitOrThrow(['config', 'user.name', 'crypto-env-test'], work);
+  await writeFile(join(work, 'README.md'), 'seed\n', 'utf8');
+  await runGitOrThrow(['add', 'README.md'], work);
+  await runGitOrThrow(['commit', '-m', 'chore: seed'], work);
+  await runGitOrThrow(['push', 'origin', 'main'], work);
+
+  await writeFile(join(work, 'README.md'), 'local-unpushed\n', 'utf8');
+  await runGitOrThrow(['add', 'README.md'], work);
+  await runGitOrThrow(['commit', '-m', 'chore: local only'], work);
+  await writeFile(join(work, '.env'), 'AHEAD=1\n', 'utf8');
+
+  const originBefore = (await runGitOrThrow(['rev-parse', 'origin/main'], work)).stdout.trim();
+  const encryptResult = await runCrypto(['encrypt'], {
+    STFUAI_ENV_REPO_ROOT: work,
+    STFUAI_ENV_SKIP_PUSH: '0',
+  });
+  assert.equal(encryptResult.code, 1);
+  assert.match(encryptResult.stderr, /Local main has 1 commit\(s\) not on origin\/main/);
+  assert.match(encryptResult.stderr, /Refusing to publish a remote tip that would omit them/);
+
+  await runGitOrThrow(['fetch', 'origin', 'main'], work);
+  const originAfter = (await runGitOrThrow(['rev-parse', 'origin/main'], work)).stdout.trim();
+  assert.equal(originAfter, originBefore);
+});
+
+test('adopts env.enc into the index when remote already matches and local is behind only on that file', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'crypto-env-match-'));
+  tempDirs.push(root);
+  const bare = join(root, 'bare.git');
+  const seed = join(root, 'seed');
+  const work = join(root, 'work');
+
+  await runGitOrThrow(['init', '--bare', '-b', 'main', bare], root);
+  await runGitOrThrow(['clone', bare, seed], root);
+  await runGitOrThrow(['config', 'user.email', 'crypto-env-test@example.com'], seed);
+  await runGitOrThrow(['config', 'user.name', 'crypto-env-test'], seed);
+  await writeFile(join(seed, 'README.md'), 'seed\n', 'utf8');
+  await runGitOrThrow(['add', 'README.md'], seed);
+  await runGitOrThrow(['commit', '-m', 'chore: seed'], seed);
+  await runGitOrThrow(['push', 'origin', 'main'], seed);
+
+  await runGitOrThrow(['clone', bare, work], root);
+  await runGitOrThrow(['config', 'user.email', 'crypto-env-test@example.com'], work);
+  await runGitOrThrow(['config', 'user.name', 'crypto-env-test'], work);
+  await writeFile(join(work, '.env'), 'MATCH=1\n', 'utf8');
+
+  assert.equal((await runCrypto(['encrypt'], {
+    STFUAI_ENV_REPO_ROOT: work,
+    STFUAI_ENV_SKIP_COMMIT: '1',
+  })).code, 0);
+
+  const encBytes = await readFile(join(work, 'credentials', 'env.enc'));
+  await mkdir(join(seed, 'credentials'), { recursive: true });
+  await writeFile(join(seed, 'credentials', 'env.enc'), encBytes);
+  await runGitOrThrow(['add', 'credentials/env.enc'], seed);
+  await runGitOrThrow(['commit', '-m', 'chore: remote already has env.enc'], seed);
+  await runGitOrThrow(['push', 'origin', 'main'], seed);
+
+  const originTip = (await runGitOrThrow(['rev-parse', 'origin/main'], seed)).stdout.trim();
+  const headBefore = (await runGitOrThrow(['rev-parse', 'HEAD'], work)).stdout.trim();
+  assert.notEqual(headBefore, originTip);
+
+  const publishResult = await runCrypto(['publish'], {
+    STFUAI_ENV_REPO_ROOT: work,
+    STFUAI_ENV_SKIP_PUSH: '0',
+  });
+  assert.equal(publishResult.code, 0);
+  assert.match(publishResult.stdout, /already matches local file/);
+  assert.match(publishResult.stdout, /Local main fast-forwarded to [0-9a-f]{7}; working tree is clean/);
+
+  const headAfter = (await runGitOrThrow(['rev-parse', 'HEAD'], work)).stdout.trim();
+  assert.equal(headAfter, originTip);
+  const tracked = (await runGitOrThrow(['ls-files', 'credentials/env.enc'], work)).stdout;
+  assert.match(tracked, /credentials\/env\.enc/);
+  const status = await runGitOrThrow(['status', '--short'], work);
+  assert.equal(status.stdout.includes('credentials/env.enc'), false);
+});
+
+test('publishes from a linked worktree using git-path for the temp index', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'crypto-env-wt-'));
+  tempDirs.push(root);
+  const bare = join(root, 'bare.git');
+  const primary = join(root, 'primary');
+  const linked = join(root, 'linked');
+
+  await runGitOrThrow(['init', '--bare', '-b', 'main', bare], root);
+  await runGitOrThrow(['clone', bare, primary], root);
+  await runGitOrThrow(['config', 'user.email', 'crypto-env-test@example.com'], primary);
+  await runGitOrThrow(['config', 'user.name', 'crypto-env-test'], primary);
+  await writeFile(join(primary, 'README.md'), 'seed\n', 'utf8');
+  await runGitOrThrow(['add', 'README.md'], primary);
+  await runGitOrThrow(['commit', '-m', 'chore: seed'], primary);
+  await runGitOrThrow(['push', 'origin', 'main'], primary);
+
+  await runGitOrThrow(['worktree', 'add', '--detach', linked], primary);
+  await writeFile(join(linked, '.env'), 'WORKTREE=1\n', 'utf8');
+
+  const encryptResult = await runCrypto(['encrypt'], {
+    STFUAI_ENV_REPO_ROOT: linked,
+    STFUAI_ENV_SKIP_PUSH: '0',
+  });
+  assert.equal(encryptResult.stderr, '');
+  assert.equal(encryptResult.code, 0);
+  assert.match(encryptResult.stdout, /Pushed credentials\/env\.enc to origin\/main/);
+
+  const verify = join(root, 'verify');
+  await runGitOrThrow(['clone', bare, verify], root);
+  assert.match(await readFile(join(verify, 'credentials', 'env.enc'), 'utf8'), /aes-256-gcm/);
+});
+
+test('accepts ENV_ENC_PASSPHRASE as the preferred alias', async () => {
+  const plaintext = 'ALIAS=1\n';
+  const { envPath, encPath } = await createFixtureEnv(plaintext);
+  const encryptResult = await runCrypto(['encrypt', encPath, envPath], {
+    STFUAI_ENV_PASSPHRASE: '',
+    ENV_ENC_PASSPHRASE: TEST_PASSPHRASE,
+  });
+  assert.equal(encryptResult.code, 0);
+  const decryptResult = await runCrypto(['decrypt', encPath, envPath], {
+    STFUAI_ENV_PASSPHRASE: '',
+    ENV_ENC_PASSPHRASE: TEST_PASSPHRASE,
+  });
+  assert.equal(decryptResult.code, 0);
+  assert.equal(await readFile(envPath, 'utf8'), plaintext);
 });

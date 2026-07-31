@@ -23,8 +23,25 @@ function javaBinExists(javaHome) {
   return fs.existsSync(path.join(javaHome, 'bin', javaExe));
 }
 
+function javaMajorVersion(javaHome) {
+  if (!javaHome) return null;
+  try {
+    const release = fs.readFileSync(path.join(javaHome, 'release'), 'utf8');
+    const match = release.match(/^JAVA_VERSION="(\d+)/m);
+    return match ? Number.parseInt(match[1], 10) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isSupportedGradleJavaHome(javaHome) {
+  if (!javaBinExists(javaHome)) return false;
+  const major = javaMajorVersion(javaHome);
+  return major === null || (major >= 17 && major <= 23);
+}
+
 function resolveJavaHome() {
-  if (process.env.JAVA_HOME && javaBinExists(process.env.JAVA_HOME)) {
+  if (process.env.JAVA_HOME && isSupportedGradleJavaHome(process.env.JAVA_HOME)) {
     return process.env.JAVA_HOME;
   }
 
@@ -52,7 +69,7 @@ function resolveJavaHome() {
   }
 
   for (const candidate of candidates) {
-    if (javaBinExists(candidate)) return candidate;
+    if (isSupportedGradleJavaHome(candidate)) return candidate;
   }
 
   return null;
@@ -80,6 +97,13 @@ const env = { ...process.env };
 const jh = resolveJavaHome();
 if (jh) {
   env.JAVA_HOME = jh;
+  if (process.env.JAVA_HOME && process.env.JAVA_HOME !== jh) {
+    const configuredMajor = javaMajorVersion(process.env.JAVA_HOME);
+    console.log(
+      `Ignoring unsupported JAVA_HOME for this Gradle build` +
+        `${configuredMajor ? ` (Java ${configuredMajor})` : ''}: ${process.env.JAVA_HOME}`
+    );
+  }
   console.log(`Using JAVA_HOME: ${jh}`);
 } else if (javaOnPath()) {
   console.log('No Android Studio JBR found; falling back to "java" on PATH.');
@@ -130,6 +154,14 @@ if (child.status === 0) {
       const sizeMb = (fs.statSync(found).size / (1024 * 1024)).toFixed(2);
       const note = found.endsWith('-unsigned.apk') ? ' [UNSIGNED]' : '';
       console.log(`APK: ${found} (${sizeMb} MB)${note}`);
+    }
+  }
+
+  if (tasks.some((t) => /bundleRelease/i.test(t))) {
+    const bundle = path.join(repoRoot, 'app', 'build', 'outputs', 'bundle', 'release', 'app-release.aab');
+    if (fs.existsSync(bundle)) {
+      const sizeMb = (fs.statSync(bundle).size / (1024 * 1024)).toFixed(2);
+      console.log(`AAB: ${bundle} (${sizeMb} MB)`);
     }
   }
 }

@@ -10,6 +10,6 @@ npm run env:publish   # publish an existing credentials/env.enc without re-encry
 npm run test:crypto-env
 ```
 
-Passphrase: interactive prompt, or `$env:STFUAI_ENV_PASSPHRASE`.
-Publish uses git plumbing (no pull/stash/worktree); local WIP is left alone.
+Passphrase: `$env:ENV_ENC_PASSPHRASE` (preferred) or `$env:STFUAI_ENV_PASSPHRASE`, else interactive prompt.
+Publish uses git plumbing (no pull/stash/worktree). Refuses when local main has unpushed commits.
 Unit tests use the disposable passphrase `pickles` against temp fixtures only.

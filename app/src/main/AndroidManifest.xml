@@ -12,7 +12,9 @@
     <!-- Android 13+ runtime notification permission. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Exact alarm to restore the ringer when the timer elapses. -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Re-arm monitoring after reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -24,7 +26,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AutoSilentTimer"
-        tools:targetApi="34">
+        tools:targetApi="36">
 
         <activity
             android:name=".MainActivity"

@@ -10,6 +10,7 @@
     "env:encrypt": "node ./scripts/crypto-env.mjs encrypt",
     "build-local-apk": "node scripts/run-gradle.js assembleDebug",
     "build-release-apk": "node scripts/run-gradle.js assembleRelease",
+    "build-release-aab": "node scripts/run-gradle.js bundleRelease",
     "install-apk": "node scripts/run-gradle.js installDebug",
     "clean": "node scripts/run-gradle.js clean",
     "lint": "node scripts/run-gradle.js lint",

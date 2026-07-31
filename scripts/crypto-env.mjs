@@ -18,9 +18,8 @@
  *   node scripts/crypto-env.mjs decrypt [encFile] [envFile]
  *     Decrypts the bundle and writes/overwrites the plaintext .env.
  *
- * Passphrase: $STFUAI_ENV_PASSPHRASE if set, otherwise an interactive hidden prompt.
- * Paths: optional argv, else $STFUAI_ENC_FILE / $STFUAI_ENV_FILE, else repo defaults.
- * Repo root override (tests): $STFUAI_ENV_REPO_ROOT
+ * Passphrase: $ENV_ENC_PASSPHRASE or $STFUAI_ENV_PASSPHRASE if set, otherwise an
+ * interactive hidden prompt. Other overrides accept ENV_ENC_* with STFUAI_* aliases.
  *
  * Zero dependencies (Node built-ins only). Adapted from auto-silent-timer's crypto-keystore.js.
  */
@@ -32,8 +31,18 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
+function firstEnv(...keys) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value != null && String(value).length) return String(value);
+  }
+  return undefined;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(process.env.STFUAI_ENV_REPO_ROOT || join(__dirname, '..'));
+const repoRoot = resolve(
+  firstEnv('ENV_ENC_REPO_ROOT', 'STFUAI_ENV_REPO_ROOT') || join(__dirname, '..'),
+);
 const REL_ENC = join('credentials', 'env.enc');
 const DEFAULT_ENC = join(repoRoot, REL_ENC);
 const DEFAULT_ENV = join(repoRoot, '.env');
@@ -112,10 +121,13 @@ function hiddenQuestion(query) {
 }
 
 async function getPassphrase(confirm) {
-  const fromEnv = process.env.STFUAI_ENV_PASSPHRASE;
-  if (fromEnv && fromEnv.length) return fromEnv;
+  const fromEnv = firstEnv('ENV_ENC_PASSPHRASE', 'STFUAI_ENV_PASSPHRASE');
+  if (fromEnv) return fromEnv;
   if (!process.stdin.isTTY) {
-    fail('No passphrase available. Set STFUAI_ENV_PASSPHRASE or run in an interactive terminal.');
+    fail(
+      'No passphrase available. Set ENV_ENC_PASSPHRASE (or STFUAI_ENV_PASSPHRASE) ' +
+        'or run in an interactive terminal.',
+    );
   }
   const p1 = await hiddenQuestion('Env passphrase: ');
   if (!p1 || p1.length < 8) fail('Passphrase must be at least 8 characters.');
@@ -127,8 +139,12 @@ async function getPassphrase(confirm) {
 }
 
 function resolvePaths(encArg, envArg) {
-  const encPath = resolve(encArg || process.env.STFUAI_ENC_FILE || DEFAULT_ENC);
-  const envPath = resolve(envArg || process.env.STFUAI_ENV_FILE || DEFAULT_ENV);
+  const encPath = resolve(
+    encArg || firstEnv('ENV_ENC_FILE', 'STFUAI_ENC_FILE') || DEFAULT_ENC,
+  );
+  const envPath = resolve(
+    envArg || firstEnv('ENV_ENC_PLAINTEXT', 'STFUAI_ENV_FILE') || DEFAULT_ENV,
+  );
   return { encPath, envPath };
 }
 
@@ -166,19 +182,25 @@ function gitAllowFail(args, options = {}) {
   }
 }
 
+function resolveGitPath(name) {
+  // Works in linked worktrees where repoRoot/.git is a file, not a directory.
+  const gitPath = git(['rev-parse', '--git-path', name]);
+  return resolve(repoRoot, gitPath);
+}
+
 function isDefaultEncPath(encPath) {
   const rel = relative(repoRoot, encPath);
   return rel === REL_ENC || rel.split(sep).join('/') === ENC_GIT_PATH;
 }
 
 function shouldPublishAfterEncrypt(encPath) {
-  if (process.env.STFUAI_ENV_SKIP_COMMIT === '1') return false;
+  if (firstEnv('ENV_ENC_SKIP_COMMIT', 'STFUAI_ENV_SKIP_COMMIT') === '1') return false;
   if (process.argv.includes('--no-commit')) return false;
   return isDefaultEncPath(encPath);
 }
 
 function shouldPushToOrigin() {
-  if (process.env.STFUAI_ENV_SKIP_PUSH === '1') return false;
+  if (firstEnv('ENV_ENC_SKIP_PUSH', 'STFUAI_ENV_SKIP_PUSH') === '1') return false;
   if (process.argv.includes('--no-push')) return false;
   return true;
 }
@@ -215,10 +237,27 @@ function commitEncryptedEnvLocally() {
 }
 
 /**
+ * Refuse to publish when local main has commits that origin/main does not.
+ * Parenting on origin/main would create a remote tip that omits those commits.
+ */
+function assertLocalMainHasNoUnpushedCommits() {
+  const localMain = gitAllowFail(['rev-parse', 'refs/heads/main']);
+  if (!localMain.ok) return;
+
+  const ahead = Number(git(['rev-list', '--count', 'origin/main..refs/heads/main']));
+  if (!Number.isFinite(ahead) || ahead <= 0) return;
+
+  fail(
+    `Local main has ${ahead} commit(s) not on origin/main. ` +
+      'Push or rebase those first, then re-run env:publish / env:encrypt. ' +
+      'Refusing to publish a remote tip that would omit them.',
+  );
+}
+
+/**
  * Publish credentials/env.enc onto origin/main without pull/stash/worktree.
  * Builds a commit whose parent is origin/main and whose only file change is the
- * encrypted env, then pushes that commit ref to origin/main. Working tree and
- * local branch tip are left untouched.
+ * encrypted env, then pushes that commit ref to origin/main.
  */
 function publishEncryptedEnvToOriginMain() {
   const encAbs = join(repoRoot, ENC_GIT_PATH);
@@ -228,7 +267,7 @@ function publishEncryptedEnvToOriginMain() {
 
   if (!shouldPushToOrigin()) {
     commitEncryptedEnvLocally();
-    console.log('Skipped push (--no-push or STFUAI_ENV_SKIP_PUSH=1).');
+    console.log('Skipped push (--no-push or ENV_ENC_SKIP_PUSH/STFUAI_ENV_SKIP_PUSH=1).');
     return;
   }
 
@@ -245,7 +284,9 @@ function publishEncryptedEnvToOriginMain() {
     return;
   }
 
-  const indexPath = join(repoRoot, '.git', 'crypto-env-temp-index');
+  assertLocalMainHasNoUnpushedCommits();
+
+  const indexPath = resolveGitPath('crypto-env-temp-index');
   rmSync(indexPath, { force: true });
 
   const indexEnv = { ...process.env, GIT_INDEX_FILE: indexPath };
@@ -278,20 +319,13 @@ function publishEncryptedEnvToOriginMain() {
 /**
  * Bring local `main` back in sync after the encrypted bundle lands on
  * origin/main, so the working tree is not left "dirty" by an
- * untracked-but-identical credentials/env.enc (and so `git pull` / sync is not
- * blocked by an untracked-file collision).
+ * untracked-but-identical credentials/env.enc.
  *
  * This ONLY acts when it is provably safe:
  *   - the current branch is `main`, and
  *   - origin/main is strictly ahead of local main (local is an ancestor), and
  *   - the ONLY path differing between local main and origin/main is
  *     credentials/env.enc.
- * In that case it fast-forwards the local main ref and adopts the identical
- * env.enc blob into the index WITHOUT rewriting the working-tree file or
- * touching any other staged/unstaged/untracked WIP.
- *
- * In every other situation (not on main, real diverging commits, or other files
- * also differ) it deliberately leaves the local branch and working tree alone.
  */
 function reconcileLocalMainAfterPublish(blob) {
   const branchResult = gitAllowFail(['branch', '--show-current']);
@@ -304,6 +338,8 @@ function reconcileLocalMainAfterPublish(blob) {
   const localMain = git(['rev-parse', 'HEAD']);
   const originMain = git(['rev-parse', 'origin/main']);
   if (localMain === originMain) {
+    // Still adopt the blob into the index in case the file is present but untracked.
+    git(['update-index', '--add', '--cacheinfo', `100644,${blob},${ENC_GIT_PATH}`]);
     console.log('Local main already matches origin/main; working tree is clean.');
     return;
   }
@@ -318,7 +354,10 @@ function reconcileLocalMainAfterPublish(blob) {
   if (!isAncestor.ok || !onlyEnvChanged) {
     console.log('Local branch tip and other WIP were not modified.');
     console.log(
-      `origin/main now carries the bundle; run 'git pull --ff-only' on main when convenient.`,
+      'origin/main now carries the bundle. Integrate onto local main when ready ' +
+        '(rebase or merge). Fast-forward only works if local main is a strict ' +
+        'ancestor of origin/main and your working tree allows it; it will not work ' +
+        'if local main has diverged or has unpushed commits.',
     );
     return;
   }
@@ -366,7 +405,9 @@ async function encrypt(encPath, envPath) {
   if (shouldPublishAfterEncrypt(encPath)) {
     publishEncryptedEnvToOriginMain();
   } else {
-    console.log('Skipped publish (custom path, --no-commit, or STFUAI_ENV_SKIP_COMMIT=1).');
+    console.log(
+      'Skipped publish (custom path, --no-commit, or ENV_ENC_SKIP_COMMIT/STFUAI_ENV_SKIP_COMMIT=1).',
+    );
   }
 }
 
