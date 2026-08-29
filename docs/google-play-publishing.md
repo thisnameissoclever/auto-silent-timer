@@ -8,7 +8,9 @@ Use these finalized release contacts and replace the remaining video placeholder
 
 1. Support email: `silent-timer-support@stfuai.com`
 2. Privacy policy URL: `https://thisnameissoclever.github.io/auto-silent-timer/`
-3. `[FOREGROUND_SERVICE_VIDEO_URL]`: the unlisted or public video URL demonstrating the foreground-service flow.
+3. Foreground-service video URL: `https://thisnameissoclever.github.io/auto-silent-timer/foreground-service-demo.mp4`.
+
+The video is published from commit `c6675b6` on the public `gh-pages` branch and is available at the URL above.
 
 Do not use `https://stfuai.com/privacy` for this app. That page describes STFUAI Podcasts, while the GitHub Pages URL above contains the published Auto Silent Timer policy.
 
@@ -54,19 +56,18 @@ Open **Grow users > Store presence > Main store listing** and enter:
 
 > Auto Silent Timer helps prevent missed calls and notifications after you silence your phone.
 >
-> When you switch your phone to silent or vibrate, the app shows a simple prompt to choose how long the phone should remain quiet. Select a preset or enter a custom duration. When the timer ends, Auto Silent Timer restores the ringer automatically.
+> When you switch your phone to silent or vibrate, the app asks how long it should stay quiet. Choose a preset or enter a custom duration. Auto Silent Timer restores the ringer when time runs out.
 >
 > Features:
 >
-> • Prompts for a timer when you manually enable silent or vibrate mode
-> • Supports quick presets and custom timer durations
-> • Restores sound automatically when the timer expires
-> • Shows the remaining time and expected restoration time
-> • Resumes monitoring and pending timers after a device restart
-> • Avoids prompting for sound changes caused by Do Not Disturb or Bedtime mode
-> • Runs entirely on your device with no account, ads, analytics, or data collection
+> • Prompts you to set a timer when you manually enable silent or vibrate mode
+> • Offers quick presets and custom durations
+> • Shows the time remaining and scheduled restoration time
+> • Restores monitoring and active timers after a device restart
+> • Ignores sound changes caused by Do Not Disturb or Bedtime mode
+> • Runs on your device with no account, ads, analytics, or data collection
 >
-> Auto Silent Timer requires display-over-other-apps and Do Not Disturb access to detect manual ringer changes, show the timer prompt, and restore sound. An ongoing notification makes background monitoring visible and lets Android keep the feature running reliably.
+> The app needs Display over other apps and Do Not Disturb access to detect manual ringer changes, show the timer prompt, and restore sound. Its ongoing notification keeps background monitoring visible and enables reliable operation.
 
 ### Graphics
 
@@ -189,7 +190,7 @@ The app uses one `specialUse` foreground service. Open **Policy and programs > A
 2. Use case: choose `Other` or the closest available monitoring option.
 3. Feature description:
 
-> When the user enables monitoring, Auto Silent Timer runs a foreground service that watches for user-initiated changes to silent or vibrate mode. It immediately posts an ongoing notification so the work is visible. When a qualifying ringer change occurs, the service shows the timer prompt. It does not use the network, location, microphone, camera, or user data.
+> When the user enables monitoring, Auto Silent Timer runs a foreground service that watches for user-initiated changes to silent or vibrate mode. The app immediately posts an ongoing notification so the work is visible, and the user can stop monitoring from the app at any time. When a qualifying ringer change occurs, the service shows the timer prompt. It does not use the network, location, microphone, camera, or user data.
 
 4. Why the task must start immediately:
 
@@ -199,7 +200,7 @@ The app uses one `specialUse` foreground service. Open **Policy and programs > A
 
 > If the service is interrupted, the app cannot observe the next user-initiated silent or vibrate transition. The user will not receive the timer prompt and the phone may remain silent until changed manually. Any timer already scheduled remains independently registered with Android's alarm system, but new ringer changes cannot be detected while monitoring is stopped.
 
-6. Video URL: `[FOREGROUND_SERVICE_VIDEO_URL]`.
+6. Video URL: `https://thisnameissoclever.github.io/auto-silent-timer/foreground-service-demo.mp4`.
 7. Video checklist: show launching the app, granting setup permissions, enabling monitoring, the persistent notification, manually switching to silent or vibrate, the timer prompt appearing over another screen, choosing a short timer, and sound restoration when it expires.
 8. Make the video public or unlisted and viewable without signing in. Do not include private notifications, contacts, account details, or other personal phone content.
 
