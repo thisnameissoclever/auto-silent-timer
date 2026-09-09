@@ -134,7 +134,7 @@ The app contains no advertising SDK or advertising content.
 Open **Policy and programs > App content > App access**:
 
 1. Are all app features available without special access? `Yes, all functionality is available without special access`.
-2. Reviewer note, if a free-text field appears: `No account or login is required. Android will ask the reviewer to grant Display over other apps, Do Not Disturb access, and notification permission during setup.`
+2. Reviewer note, if a free-text field appears: `No account or login is required. Android will ask the reviewer to grant Display over other apps, Do Not Disturb access, notification permission, and the background battery exemption during setup.`
 
 Device permissions are not login credentials or restricted app access. The reviewer can grant them using the app's visible setup controls.
 
@@ -216,6 +216,9 @@ Use these values if Console or a reviewer asks why each permission is necessary:
 4. Exact alarms (`SCHEDULE_EXACT_ALARM` through Android 12L and `USE_EXACT_ALARM` on Android 13+): `Restores the ringer at the end of the exact duration selected by the user, including while the device is idle.`
 5. Foreground service (`FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_SPECIAL_USE`): `Keeps user-enabled ringer-mode monitoring active and visible through an ongoing notification.`
 6. Start after reboot (`RECEIVE_BOOT_COMPLETED`): `Resumes monitoring after restart and re-registers an active timer because Android alarms do not survive a device reboot.`
+7. Battery optimization exemption (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`): `Opens the system dialog that lets the user exempt the app from battery optimization. The app's core function is a foreground service that must be alive at the moment the user switches the ringer; without the exemption, Android and manufacturer battery managers stop that service after a period of inactivity and the timer prompt never appears. The user can decline; monitoring still runs, with reduced reliability, and the app never re-prompts on its own.`
+
+Play's policy allows this permission only when an app's core functionality is adversely affected without it. That is the case here: the whole app is the background monitor. Do not add any other use of the exemption.
 
 ## 17. Countries, Pricing, And Distribution
 
@@ -235,7 +238,7 @@ Use these values if Console or a reviewer asks why each permission is necessary:
 > Initial release of Auto Silent Timer. Set an automatic ringer restoration timer whenever the phone is switched to silent or vibrate.
 
 6. Save, review, and roll out to internal testing.
-7. Install from the Play opt-in link on at least one physical device. Test permission onboarding, monitoring notification, overlay prompt, exact timer expiry while idle, reboot recovery, and manual stop/restore actions.
+7. Install from the Play opt-in link on at least one physical device. Test permission onboarding (including the Background battery use row), monitoring notification, overlay prompt, exact timer expiry while idle, reboot recovery, recovery after an app update, and manual stop/restore actions. Then stop the app from the notification shade's Active apps list and confirm the main screen reports why monitoring stopped.
 
 ## 19. Production Release
 

@@ -9,6 +9,7 @@
     <string name="action_start">Start monitoring</string>
     <string name="action_stop">Stop monitoring</string>
     <string name="action_grant">Grant</string>
+    <string name="action_allow">Allow</string>
     <string name="action_open_settings">Open settings</string>
     <string name="action_done">Done</string>
     <string name="action_restore_sound">Restore sound</string>
@@ -45,6 +46,8 @@
     <string name="perm_notifications_desc">Used for the monitoring status and the silent-timer alert.</string>
     <string name="perm_exact_alarm_title">Alarms &amp; reminders</string>
     <string name="perm_exact_alarm_desc">Lets the restore timer fire at the exact time you choose.</string>
+    <string name="perm_battery_title">Background battery use</string>
+    <string name="perm_battery_desc">Lets Android keep monitoring running while the phone sits idle. Without it, many phones stop the app after a while.</string>
     <string name="perm_status_granted">Granted</string>
     <string name="perm_status_needed">Needed</string>
 

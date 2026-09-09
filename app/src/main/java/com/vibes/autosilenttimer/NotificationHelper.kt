@@ -108,8 +108,16 @@ object NotificationHelper {
         return builder.build()
     }
 
-    /** Re-posts the FGS notification so its text reflects current timer state. */
+    /**
+     * Re-posts the FGS notification so its text reflects current timer state.
+     *
+     * Skipped when the service is not running (for example the timer alarm fired
+     * after the process had been killed): posting it then would leave a stray
+     * "monitoring is on" notification with no service behind it. A service that
+     * starts afterwards builds a fresh notification anyway.
+     */
     fun updateMonitorNotification(context: Context) {
+        if (!MonitorService.isRunning) return
         notifySafely(context, FGS_ID, buildMonitorNotification(context))
     }
 

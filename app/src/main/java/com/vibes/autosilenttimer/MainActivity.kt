@@ -22,14 +22,16 @@ import com.google.android.material.button.MaterialButton
 import com.vibes.autosilenttimer.databinding.ActivityMainBinding
 import java.text.DateFormat
 import java.util.Date
+import kotlin.math.abs
 
 /**
  * Onboarding / control screen.
  *
  * Owns the [Prefs.monitoringEnabled] flag (the engine never touches it): the
  * Start/Stop button flips the flag and then starts/stops [MonitorService]. Also
- * surfaces the four special permissions with deep-links to grant them, and shows
- * a live countdown of any active restore timer while resumed.
+ * surfaces the special permissions with deep-links to grant them, shows a live
+ * countdown of any active restore timer while resumed, and reports whether the
+ * service is actually alive plus why it last died ([ProcessDeath]).
  */
 class MainActivity : AppCompatActivity() {
 
@@ -72,6 +74,7 @@ class MainActivity : AppCompatActivity() {
         binding.permExactAlarmButton.setOnClickListener {
             openSettings(Permissions.exactAlarmSettingsIntent(this))
         }
+        binding.permBatteryButton.setOnClickListener { onBatteryButtonClicked() }
     }
 
     override fun onResume() {
@@ -94,14 +97,12 @@ class MainActivity : AppCompatActivity() {
      * already-running service is a no-op, so this is safe to call on every resume and
      * after the notifications-permission result. An explicit Stop sets the flag false,
      * so it correctly prevents auto-restart until the user taps Start again.
+     *
+     * This is also the recovery path of last resort: if Android killed the service
+     * and no other hook brought it back, opening the app does.
      */
     private fun maybeAutoStartMonitoring() {
-        if (prefs.monitoringEnabled &&
-            Permissions.canDrawOverlays(this) &&
-            Permissions.hasDndAccess(this)
-        ) {
-            MonitorService.start(this)
-        }
+        MonitorService.startIfEnabled(this)
     }
 
     // region Monitoring start/stop
@@ -127,9 +128,12 @@ class MainActivity : AppCompatActivity() {
         prefs.monitoringEnabled = true
         MonitorService.start(this)
 
-        // Notifications + exact alarm are recommended (not required): warn but allow.
+        // Notifications, exact alarm and the battery exemption are recommended (not
+        // required): warn but allow.
         val recommendedMissing =
-            !Permissions.hasPostNotifications(this) || !Permissions.canScheduleExactAlarms(this)
+            !Permissions.hasPostNotifications(this) ||
+                !Permissions.canScheduleExactAlarms(this) ||
+                !Permissions.hasUnrestrictedBattery(this)
         toast(if (recommendedMissing) R.string.msg_recommended_permissions else R.string.msg_monitoring_started)
         refreshStatus()
     }
@@ -169,6 +173,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Battery row. Two different system screens depending on what is wrong:
+     *  - "Restricted" battery usage can only be changed on the app's details page,
+     *    so explain and go there;
+     *  - otherwise open the one-tap "always run in background" dialog. A few
+     *    devices lack it, so fall back to the system exemption list.
+     */
+    private fun onBatteryButtonClicked() {
+        if (Permissions.isBackgroundRestricted(this)) {
+            toast(R.string.msg_battery_restricted)
+            openSettings(Permissions.appDetailsIntent(this))
+            return
+        }
+        try {
+            startActivity(Permissions.batteryExemptionIntent(this))
+        } catch (e: ActivityNotFoundException) {
+            openSettings(Permissions.batteryOptimizationListIntent())
+        } catch (e: SecurityException) {
+            openSettings(Permissions.batteryOptimizationListIntent())
+        }
+    }
+
     /** Some settings deep-links are unavailable on certain devices/ROMs. */
     private fun openSettings(intent: Intent) {
         try {
@@ -187,12 +213,16 @@ class MainActivity : AppCompatActivity() {
     private fun refreshStatus() {
         val enabled = prefs.monitoringEnabled
         val permsReady = Permissions.canDrawOverlays(this) && Permissions.hasDndAccess(this)
-        // "Running" = intent on AND able to function; "pending" = intent on but
-        // perms missing (auto-starts once granted); otherwise explicitly off.
-        val running = enabled && permsReady
+        // "wanted" = intent on AND able to function; "running" additionally means
+        // the service is alive right now (Android can kill it underneath us, and
+        // the pref would never know); "pending" = intent on but perms missing
+        // (auto-starts once granted); otherwise explicitly off.
+        val wanted = enabled && permsReady
+        val running = wanted && MonitorService.isRunning
 
         val statusRes = when {
             running -> R.string.status_monitoring_on
+            wanted -> R.string.status_monitoring_starting
             enabled -> R.string.status_monitoring_pending
             else -> R.string.status_monitoring_off
         }
@@ -204,7 +234,7 @@ class MainActivity : AppCompatActivity() {
             )
         )
 
-        // Show Stop while running and Start while off. In the pending state the
+        // Show Stop while wanted and Start while off. In the pending state the
         // permission rows below own the next action, so hide the button to avoid
         // a misleading "Start"/"Stop" affordance that can't do anything yet.
         if (enabled && !permsReady) {
@@ -212,9 +242,9 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.btnStartStop.visibility = View.VISIBLE
             binding.btnStartStop.text =
-                getString(if (running) R.string.action_stop else R.string.action_start)
+                getString(if (wanted) R.string.action_stop else R.string.action_start)
             binding.btnStartStop.setIconResource(
-                if (running) R.drawable.main_ic_stop else R.drawable.main_ic_play
+                if (wanted) R.drawable.main_ic_stop else R.drawable.main_ic_play
             )
         }
 
@@ -233,6 +263,48 @@ class MainActivity : AppCompatActivity() {
         }
         // The Restore sound / Stop timer controls only make sense with a live timer.
         binding.timerActionsRow.visibility = if (timerActive) View.VISIBLE else View.GONE
+
+        renderLastKill()
+    }
+
+    /**
+     * Shows why the monitoring process last died, once Android has killed it at
+     * least once. Deliberately kept visible after a successful restart: the whole
+     * point is that "it stopped again" becomes a readable line instead of a guess.
+     */
+    private fun renderLastKill() {
+        val cause = prefs.lastKillCause?.let { name ->
+            runCatching { KillCause.valueOf(name) }.getOrNull()
+        }
+        if (cause == null) {
+            binding.statusLastStop.visibility = View.GONE
+            return
+        }
+        val at = prefs.lastKillAt
+        val line = getString(
+            R.string.status_last_kill_format,
+            getString(killCauseRes(cause)),
+            formatClock(at, System.currentTimeMillis() - at)
+        )
+        val detail = prefs.lastKillDescription?.takeIf { it.isNotBlank() }
+        binding.statusLastStop.text = if (detail != null) {
+            line + "\n" + getString(R.string.status_last_kill_detail_format, detail)
+        } else {
+            line
+        }
+        binding.statusLastStop.visibility = View.VISIBLE
+    }
+
+    @StringRes
+    private fun killCauseRes(cause: KillCause): Int = when (cause) {
+        KillCause.USER -> R.string.kill_cause_user
+        KillCause.UPDATED -> R.string.kill_cause_updated
+        KillCause.MEMORY -> R.string.kill_cause_memory
+        KillCause.BATTERY -> R.string.kill_cause_battery
+        KillCause.CRASH -> R.string.kill_cause_crash
+        KillCause.SYSTEM -> R.string.kill_cause_system
+        KillCause.RESTART_REFUSED -> R.string.kill_cause_restart_refused
+        KillCause.UNKNOWN -> R.string.kill_cause_unknown
     }
 
     private fun refreshPermissions() {
@@ -255,6 +327,11 @@ class MainActivity : AppCompatActivity() {
             Permissions.canScheduleExactAlarms(this),
             binding.permExactAlarmStatus,
             binding.permExactAlarmButton
+        )
+        bindPermissionRow(
+            Permissions.hasUnrestrictedBattery(this),
+            binding.permBatteryStatus,
+            binding.permBatteryButton
         )
     }
 
@@ -296,14 +373,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Restore wall-clock time; includes the date when more than a day out. */
-    private fun formatClock(endAt: Long, remaining: Long): String {
-        val format = if (remaining >= DAY_MS) {
+    /**
+     * Wall-clock time; includes the date when [distanceMs] (how far from now, in
+     * either direction) is more than a day.
+     */
+    private fun formatClock(at: Long, distanceMs: Long): String {
+        val format = if (abs(distanceMs) >= DAY_MS) {
             DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
         } else {
             DateFormat.getTimeInstance(DateFormat.SHORT)
         }
-        return format.format(Date(endAt))
+        return format.format(Date(at))
     }
 
     @ColorInt

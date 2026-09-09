@@ -17,7 +17,13 @@ class TimerActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         when (intent?.action) {
-            ACTION_TIMER_EXPIRED -> TimerController.restoreSound(context, alerted = true)
+            ACTION_TIMER_EXPIRED -> {
+                TimerController.restoreSound(context, alerted = true)
+                // The alarm may have woken a dead process (something killed the
+                // service earlier). An exact alarm is one of the few moments a
+                // background app may start a foreground service, so use it.
+                MonitorService.startIfEnabled(context)
+            }
             ACTION_RESTORE_SOUND -> TimerController.restoreSound(context, alerted = false)
             ACTION_STOP_TIMER -> TimerController.stopTimer(context)
         }

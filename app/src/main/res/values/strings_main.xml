@@ -4,10 +4,30 @@
 <resources>
     <!-- Shown after monitoring starts while POST_NOTIFICATIONS and/or exact-alarm
          are still missing: monitoring is allowed, but reliability may suffer. -->
-    <string name="msg_recommended_permissions">Monitoring started. Notifications and exact alarm are recommended for reliable auto-restore.</string>
+    <string name="msg_recommended_permissions">Monitoring started. Notifications, exact alarm and background battery use are recommended so it keeps working.</string>
+    <!-- Shown when the Battery row is tapped while the app's battery usage is set
+         to Restricted: only the user can change that, on the app details page. -->
+    <string name="msg_battery_restricted">Battery usage is set to Restricted. Change it to Unrestricted on the next screen.</string>
     <!-- Shown when a settings deep-link cannot be opened on this device. -->
     <string name="msg_settings_unavailable">Couldn\'t open that settings screen on this device.</string>
     <!-- Status shown when monitoring is enabled (the default/intent) but the
          required overlay + DND permissions are not both granted yet. -->
     <string name="status_monitoring_pending">Monitoring will start automatically once the required permissions are granted.</string>
+    <!-- Monitoring is wanted and allowed but the service is not alive yet (it is
+         being started, or Android stopped it and the app is bringing it back). -->
+    <string name="status_monitoring_starting">Monitoring is starting…</string>
+
+    <!-- Why the monitoring process last died. %1$s is one of the kill_cause_*
+         phrases, %2$s a formatted time. -->
+    <string name="status_last_kill_format">Monitoring was last %1$s at %2$s.</string>
+    <!-- Android's own free-text note about the kill, when it gave one. -->
+    <string name="status_last_kill_detail_format">Android\'s note: %1$s</string>
+    <string name="kill_cause_user">stopped by you (Force stop, or the Stop button in the notification shade)</string>
+    <string name="kill_cause_updated">stopped by an app update or a permission change</string>
+    <string name="kill_cause_memory">killed by Android to free memory</string>
+    <string name="kill_cause_battery">killed by Android\'s battery limits</string>
+    <string name="kill_cause_crash">stopped by a crash</string>
+    <string name="kill_cause_system">stopped by the system</string>
+    <string name="kill_cause_restart_refused">blocked by Android from restarting</string>
+    <string name="kill_cause_unknown">stopped for an unknown reason</string>
 </resources>
