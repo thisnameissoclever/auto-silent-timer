@@ -1,5 +1,6 @@
 package com.vibes.autosilenttimer
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 
@@ -56,6 +57,54 @@ class Prefs(context: Context) {
         timerEndAtMillis = 0L
     }
 
+    // region Process-death bookkeeping (see ProcessDeath)
+
+    /**
+     * True from [MonitorService.onCreate] until [MonitorService.onDestroy]. If it
+     * is still true when the service is created again, the previous process died
+     * without a clean shutdown: Android, the phone maker, or the user killed it.
+     *
+     * Written synchronously ([SharedPreferences.Editor.commit]) because a kill can
+     * follow at any moment and an unflushed write would hide it.
+     */
+    var serviceAlive: Boolean
+        get() = prefs.getBoolean(KEY_SERVICE_ALIVE, false)
+        @SuppressLint("ApplySharedPref") // Deliberate: must hit disk before a kill can.
+        set(value) {
+            prefs.edit().putBoolean(KEY_SERVICE_ALIVE, value).commit()
+        }
+
+    /** Wall-clock time (epoch millis) the service last started, or 0L. Committed synchronously. */
+    var lastServiceStartAt: Long
+        get() = prefs.getLong(KEY_LAST_SERVICE_START_AT, 0L)
+        @SuppressLint("ApplySharedPref") // Deliberate: see serviceAlive.
+        set(value) {
+            prefs.edit().putLong(KEY_LAST_SERVICE_START_AT, value).commit()
+        }
+
+    /** Coarse cause of the last detected kill, as a [KillCause] name, or null if none. */
+    val lastKillCause: String?
+        get() = prefs.getString(KEY_LAST_KILL_CAUSE, null)
+
+    /** Android's own free-text description of the last kill, when it gave one. */
+    val lastKillDescription: String?
+        get() = prefs.getString(KEY_LAST_KILL_DESCRIPTION, null)
+
+    /** Wall-clock time (epoch millis) of the last detected kill, or 0L. */
+    val lastKillAt: Long
+        get() = prefs.getLong(KEY_LAST_KILL_AT, 0L)
+
+    /** Records a detected kill so the UI can show why monitoring stopped. */
+    fun recordKill(cause: KillCause, description: String?, atMillis: Long) {
+        prefs.edit()
+            .putString(KEY_LAST_KILL_CAUSE, cause.name)
+            .putString(KEY_LAST_KILL_DESCRIPTION, description)
+            .putLong(KEY_LAST_KILL_AT, atMillis)
+            .apply()
+    }
+
+    // endregion
+
     companion object {
         const val FILE_NAME = "auto_silent_timer"
         const val DEFAULT_UNIT = "hours"
@@ -64,5 +113,10 @@ class Prefs(context: Context) {
         private const val KEY_LAST_DURATION_MILLIS = "last_duration_millis"
         private const val KEY_MONITORING_ENABLED = "monitoring_enabled"
         private const val KEY_TIMER_END_AT = "timer_end_at_millis"
+        private const val KEY_SERVICE_ALIVE = "service_alive"
+        private const val KEY_LAST_SERVICE_START_AT = "last_service_start_at"
+        private const val KEY_LAST_KILL_CAUSE = "last_kill_cause"
+        private const val KEY_LAST_KILL_DESCRIPTION = "last_kill_description"
+        private const val KEY_LAST_KILL_AT = "last_kill_at"
     }
 }

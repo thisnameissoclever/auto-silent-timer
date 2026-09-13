@@ -18,6 +18,10 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Re-arm monitoring after reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Opens the one-tap "always run in background" dialog. Without the battery
+         exemption, Android and most phone makers eventually stop the monitoring
+         service; with it, the app may also restart the service from the background. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"
@@ -55,6 +59,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- An app update kills the running process; restart monitoring. -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

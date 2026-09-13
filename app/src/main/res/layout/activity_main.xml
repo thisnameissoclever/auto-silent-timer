@@ -84,6 +84,19 @@
                     tools:text="Sound resumes at 5:30 PM"
                     tools:visibility="visible" />
 
+                <!-- Why the monitoring process last died, shown once Android has
+                     killed it at least once. Hidden until then. -->
+                <TextView
+                    android:id="@+id/statusLastStop"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorError"
+                    android:visibility="gone"
+                    tools:text="Monitoring was last stopped by you at 3:12 PM."
+                    tools:visibility="visible" />
+
                 <!-- Timer controls: only shown while a restore timer is active. -->
                 <LinearLayout
                     android:id="@+id/timerActionsRow"
@@ -402,6 +415,70 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:text="@string/action_grant" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="18dp"
+                    android:background="?attr/colorOutlineVariant" />
+
+                <!-- Background battery use (battery-optimization exemption) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/perm_battery_title"
+                                android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                            <TextView
+                                android:id="@+id/permBatteryStatus"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:background="@drawable/main_status_chip_bg"
+                                android:includeFontPadding="false"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="3dp"
+                                android:text="@string/perm_status_needed"
+                                android:textAppearance="?attr/textAppearanceLabelSmall" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/perm_battery_desc"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/permBatteryButton"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:text="@string/action_allow" />
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

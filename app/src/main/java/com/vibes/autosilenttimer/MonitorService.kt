@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import androidx.annotation.RequiresApi
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 
@@ -29,6 +30,16 @@ import androidx.core.content.ContextCompat
  * Monitoring on/off is owned by the UI ([Prefs.monitoringEnabled] + the
  * companion [start]/[stop]); this service never modifies that flag. Self-made
  * ringer changes are filtered out via [RingerController.shouldIgnore].
+ *
+ * Staying alive: the ringer broadcast is only delivered to a running process, so
+ * this service is the app. Android (or the phone maker, or the user) can kill it
+ * at any time; nothing in-process can prevent that. What the app does instead:
+ *  - reports each kill ([ProcessDeath]) so the main screen tells the truth,
+ *  - restarts on every hook it has: sticky restart, boot, app update
+ *    ([BootReceiver]), the timer alarm ([TimerActionReceiver]) and the app
+ *    being opened ([MainActivity]),
+ *  - asks for the battery-optimization exemption, the one setting that makes
+ *    kills rare ([Permissions.hasUnrestrictedBattery]).
  */
 class MonitorService : Service() {
 
@@ -47,6 +58,9 @@ class MonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // First: if the previous process was killed, record why before anything
+        // else can fail. Also marks this instance alive.
+        ProcessDeath.noteServiceStart(this)
         NotificationHelper.ensureChannels(this)
 
         overlay = OverlayController(
@@ -88,6 +102,8 @@ class MonitorService : Service() {
             IntentFilter(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+
+        isRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -97,12 +113,32 @@ class MonitorService : Service() {
         } else {
             0
         }
-        ServiceCompat.startForeground(
-            this,
-            NotificationHelper.FGS_ID,
-            NotificationHelper.buildMonitorNotification(this),
-            type
-        )
+        val promoted = try {
+            ServiceCompat.startForeground(
+                this,
+                NotificationHelper.FGS_ID,
+                NotificationHelper.buildMonitorNotification(this),
+                type
+            )
+            true
+        } catch (e: IllegalStateException) {
+            // Android 12+ refuses a foreground start from the background when the
+            // app has no exemption (for example a sticky restart while the app is
+            // battery-restricted). The compat helper lets that propagate, and an
+            // uncaught exception here would crash the process; a few crashes in
+            // a row and Android stops restarting the service at all. Stop cleanly
+            // instead: the next app open, boot, update or timer expiry starts it.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && Api31.isStartNotAllowed(e)) {
+                false
+            } else {
+                throw e
+            }
+        }
+        if (!promoted) {
+            ProcessDeath.noteRestartRefused(this)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         rearmPendingTimer()
         return START_STICKY
     }
@@ -216,7 +252,17 @@ class MonitorService : Service() {
         dndReceiver = null
         overlay?.dismiss()
         overlay = null
+        isRunning = false
+        // A clean shutdown (Stop button, stopSelf) is not a kill.
+        ProcessDeath.noteServiceStop(this)
         super.onDestroy()
+    }
+
+    // Kept in its own class so devices below API 31 never load the exception class.
+    @RequiresApi(Build.VERSION_CODES.S)
+    private object Api31 {
+        fun isStartNotAllowed(e: Throwable): Boolean =
+            e is android.app.ForegroundServiceStartNotAllowedException
     }
 
     companion object {
@@ -232,12 +278,57 @@ class MonitorService : Service() {
          */
         private const val PROMPT_DELAY_MS = 500L
 
-        /** Starts the monitoring service in the foreground. */
-        fun start(context: Context) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, MonitorService::class.java)
-            )
+        /**
+         * True while a [MonitorService] instance exists in this process.
+         *
+         * Exact by construction: the activity, the receivers and the service all
+         * share one process, so if that process was killed the flag died with it
+         * and a fresh process starts out false. This is what "monitoring is on"
+         * should mean, as opposed to "the user wants it on".
+         */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
+        /**
+         * Starts the monitoring service in the foreground.
+         *
+         * On Android 12+ the call itself is refused, with an exception, when the
+         * app is in the background without an exemption (for example an inexact
+         * timer alarm on a phone that denied exact alarms). Catch it: crashing a
+         * receiver helps nobody, and the next app open starts the service anyway.
+         *
+         * @return false if Android refused; the refusal is recorded for the UI.
+         */
+        fun start(context: Context): Boolean {
+            return try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, MonitorService::class.java)
+                )
+                true
+            } catch (e: IllegalStateException) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && Api31.isStartNotAllowed(e)) {
+                    ProcessDeath.noteRestartRefused(context)
+                    false
+                } else {
+                    throw e
+                }
+            }
+        }
+
+        /**
+         * Starts monitoring if the user wants it on ([Prefs.monitoringEnabled]) and
+         * both required permissions are present. Starting an already-running
+         * service is a no-op, so every restart hook can call this freely.
+         *
+         * @return true if the service was started (or was already running).
+         */
+        fun startIfEnabled(context: Context): Boolean {
+            val wanted = Prefs(context).monitoringEnabled &&
+                Permissions.canDrawOverlays(context) &&
+                Permissions.hasDndAccess(context)
+            return wanted && start(context)
         }
 
         /** Stops the monitoring service. */
