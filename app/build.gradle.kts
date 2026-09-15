@@ -58,8 +58,11 @@ android {
         applicationId = "com.vibes.autosilenttimer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // Google Play rejects a reused version code, so every upload after the
+        // first has to increase this. 2 assumes 1.0 (1) is the version currently
+        // live in the Console; check the Console and adjust if it is higher.
+        versionCode = 2
+        versionName = "1.1"
     }
 
     signingConfigs {
